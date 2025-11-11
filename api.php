@@ -117,7 +117,15 @@ function top_hosts_root() {
             LIMIT 50";
     $st = $pdo->prepare($sql);
     $st->execute($bind);
-    return ['rows'=>$st->fetchAll()];
+    $rows = $st->fetchAll();
+    $exclusions = load_top_domain_exclusions();
+    if (!empty($exclusions)) {
+        $rows = array_values(array_filter($rows, function($row) use ($exclusions) {
+            $root = strtolower($row['root'] ?? '');
+            return $root === '' || !isset($exclusions[$root]);
+        }));
+    }
+    return ['rows'=>$rows];
 }
 
 function subdomains() {
