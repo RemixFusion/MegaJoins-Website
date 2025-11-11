@@ -26,6 +26,20 @@
   const form = qs('#filter-form');
   const exportLink = qs('#export');
 
+  async function fetchJson(url){
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    if (data && typeof data === 'object' && data.error) {
+      const err = new Error(data.error);
+      err.fromApi = true;
+      throw err;
+    }
+    return data;
+  }
+
   function params(extra={}){
     const p = new URLSearchParams();
     ['start','end','host','uuid','player','interval'].forEach(id=>{
@@ -41,50 +55,100 @@
 
   async function loadAll(){
     // Summary
-    const s = await (await fetch('api.php?action=summary&'+params())).json();
-    if (s.totals) {
-      qs('#total-all').innerText = fmtNum(s.totals.all);
-      qs('#total-unique').innerText = fmtNum(s.totals.unique);
-      qs('#total-hosts').innerText = fmtNum(s.totals.distinct_hosts);
+    try {
+      const s = await fetchJson('api.php?action=summary&'+params().toString());
+      if (s.totals) {
+        qs('#total-all').innerText = fmtNum(s.totals.all);
+        qs('#total-unique').innerText = fmtNum(s.totals.unique);
+        qs('#total-hosts').innerText = fmtNum(s.totals.distinct_hosts);
+      }
+    } catch (err) {
+      console.error('Failed to load summary', err);
+      qs('#total-all').innerText = '—';
+      qs('#total-unique').innerText = '—';
+      qs('#total-hosts').innerText = '—';
     }
 
     // Timeseries
-    const t = await (await fetch('api.php?action=timeseries&'+params())).json();
-    const labels = t.rows.map(r=>r.d);
-    const seriesAll = t.rows.map(r=>Number(r.c));
-    const seriesUniq = t.rows.map(r=>Number(r.u));
-    updateChart(labels, seriesAll, seriesUniq);
+    try {
+      const t = await fetchJson('api.php?action=timeseries&'+params().toString());
+      const rows = Array.isArray(t.rows) ? t.rows : [];
+      const labels = rows.map(r=>r.d);
+      const seriesAll = rows.map(r=>Number(r.c));
+      const seriesUniq = rows.map(r=>Number(r.u));
+      updateChart(labels, seriesAll, seriesUniq);
+    } catch (err) {
+      console.error('Failed to load timeseries', err);
+      updateChart([], [], []);
+    }
 
     // Top roots
-    const h = await (await fetch('api.php?action=top-hosts-root&'+params())).json();
     const tb = qs('#roots-table tbody'); tb.innerHTML='';
     domainCache.clear();
-    h.rows.forEach(r=>{
+    let topRows = [];
+    let topError = null;
+    try {
+      const h = await fetchJson('api.php?action=top-hosts-root&'+params().toString());
+      if (Array.isArray(h.rows)) {
+        topRows = h.rows;
+      }
+    } catch (err) {
+      console.error('Failed to load top domains', err);
+      topError = err;
+    }
+    if (topRows.length) {
+      topRows.forEach(r=>{
+        const tr = document.createElement('tr');
+        const a = document.createElement('a'); a.href='#'; a.textContent=r.root;
+        a.addEventListener('click', e=>{ e.preventDefault(); });
+        a.addEventListener('mouseover', e=>showDomainTooltip(e, r));
+        a.addEventListener('mousemove', positionTooltip);
+        a.addEventListener('mouseout', hideTooltip);
+        tr.innerHTML = `<td></td><td>${fmtNum(r.c)}</td><td>${fmtNum(r.u)}</td>`;
+        tr.children[0].appendChild(a);
+        tb.appendChild(tr);
+      });
+    } else {
       const tr = document.createElement('tr');
-      const a = document.createElement('a'); a.href='#'; a.textContent=r.root;
-      a.addEventListener('click', e=>{ e.preventDefault(); });
-      a.addEventListener('mouseover', e=>showDomainTooltip(e, r));
-      a.addEventListener('mousemove', positionTooltip);
-      a.addEventListener('mouseout', hideTooltip);
-      tr.innerHTML = `<td></td><td>${fmtNum(r.c)}</td><td>${fmtNum(r.u)}</td>`;
-      tr.children[0].appendChild(a);
+      const td = document.createElement('td');
+      td.colSpan = 3;
+      td.textContent = topError ? 'Unable to load top domains' : 'No domains found';
+      tr.appendChild(td);
       tb.appendChild(tr);
-    });
+    }
 
     // Recent joins
-    const r = await (await fetch('api.php?action=recent&'+params({page,per}))).json();
     const rb = qs('#recent-table tbody'); rb.innerHTML='';
-    r.rows.forEach(row=>{
-      const date = new Date(row.ts*1000);
-      const when = date.toLocaleString();
+    let recent = { rows: [], total: 0 };
+    let recentError = null;
+    try {
+      recent = await fetchJson('api.php?action=recent&'+params({page,per}).toString());
+    } catch (err) {
+      console.error('Failed to load recent joins', err);
+      recentError = err;
+    }
+    if (Array.isArray(recent.rows) && recent.rows.length) {
+      recent.rows.forEach(row=>{
+        const date = new Date(row.ts*1000);
+        const when = date.toLocaleString();
+        const tr = document.createElement('tr');
+        const hostA = `<a href="#" data-host="${row.hostname}">${row.hostname}</a>`;
+        const playerA = `<a href="#" class="player" data-player="${row.player_name}">${row.player_name}</a>`;
+        const uuidA = `<a href="#" class="uuid" data-uuid="${row.uuid}">${row.uuid}</a>`;
+        tr.innerHTML = `<td>${playerA}</td><td>${hostA}</td><td>${uuidA}</td><td>${when}</td>`;
+        rb.appendChild(tr);
+      });
+    } else {
       const tr = document.createElement('tr');
-      const hostA = `<a href="#" data-host="${row.hostname}">${row.hostname}</a>`;
-      const playerA = `<a href="#" class="player" data-player="${row.player_name}">${row.player_name}</a>`;
-      const uuidA = `<a href="#" class="uuid" data-uuid="${row.uuid}">${row.uuid}</a>`;
-      tr.innerHTML = `<td>${playerA}</td><td>${hostA}</td><td>${uuidA}</td><td>${when}</td>`;
+      const td = document.createElement('td');
+      td.colSpan = 4;
+      td.textContent = recentError ? 'Unable to load recent joins' : 'No joins found';
+      tr.appendChild(td);
       rb.appendChild(tr);
-    });
-    qs('#page-info').textContent = `Page ${page} of ${Math.max(1, Math.ceil(r.total/per))}`;
+    }
+    const total = Number(recent.total) || 0;
+    const totalPages = total ? Math.max(1, Math.ceil(total/per)) : 1;
+    qs('#page-info').textContent = `Page ${page} of ${totalPages}`;
 
     // Drilldown & filters
     rb.querySelectorAll('a[data-host]').forEach(a => a.addEventListener('click', e=>{ e.preventDefault(); qs('#host').value=a.dataset.host; page=1; loadAll(); }));
@@ -101,7 +165,7 @@
     }));
 
     // Export link with current filters
-    exportLink.href = 'export.php?'+params();
+    exportLink.href = 'export.php?'+params().toString();
   }
 
   // Domain tooltip
@@ -144,7 +208,7 @@
 
     tooltipEl.innerHTML = 'Loading…';
     try {
-      const data = await (await fetch('api.php?action=subdomains&root='+encodeURIComponent(root)+'&'+params())).json();
+      const data = await fetchJson('api.php?action=subdomains&root='+encodeURIComponent(root)+'&'+params().toString());
       const rows = (data.rows || []).map(r=>({ hostname:r.hostname, c:Number(r.c), u:Number(r.u) }));
       domainCache.set(root, rows);
       render(rows);
@@ -160,7 +224,7 @@
     positionTooltip(evt);
     tooltipEl.classList.remove('hidden');
     try {
-      const data = await (await fetch('api.php?action=player-stats&player='+encodeURIComponent(player)+'&'+params())).json();
+      const data = await fetchJson('api.php?action=player-stats&player='+encodeURIComponent(player)+'&'+params().toString());
       if (!data.rows) { tooltipEl.innerHTML='No data'; return; }
       const byRoot = {};
       data.rows.forEach(r=>{

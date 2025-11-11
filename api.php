@@ -118,7 +118,14 @@ function top_hosts_root() {
     $st = $pdo->prepare($sql);
     $st->execute($bind);
     $rows = $st->fetchAll();
-    $exclusions = load_top_domain_exclusions();
+
+    $exclusions = [];
+    if (function_exists('load_top_domain_exclusions')) {
+        $exclusions = load_top_domain_exclusions();
+        if (!is_array($exclusions)) {
+            $exclusions = [];
+        }
+    }
     if (!empty($exclusions)) {
         $rows = array_values(array_filter($rows, function($row) use ($exclusions) {
             $root = strtolower($row['root'] ?? '');
