@@ -1,4 +1,3 @@
-
 <?php
 // api.php - JSON endpoints for the dashboard
 header('Content-Type: application/json; charset=utf-8');
