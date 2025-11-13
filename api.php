@@ -153,10 +153,24 @@ function top_hosts_root() {
             $where
             GROUP BY root
             ORDER BY c DESC, root ASC
-            LIMIT 50";
+            LIMIT 200";
     $st = $pdo->prepare($sql);
     $st->execute($bind);
-    return ['rows'=>$st->fetchAll()];
+    $rows = $st->fetchAll();
+
+    $exclusions = top_domain_exclusions();
+    if ($exclusions) {
+        $rows = array_values(array_filter($rows, function ($row) use ($exclusions) {
+            $root = strtolower($row['root'] ?? '');
+            return $root === '' || !isset($exclusions[$root]);
+        }));
+    }
+
+    if (count($rows) > 50) {
+        $rows = array_slice($rows, 0, 50);
+    }
+
+    return ['rows'=>$rows];
 }
 
 function subdomains() {
@@ -233,4 +247,53 @@ function player_stats() {
     $st = $pdo->prepare($sql);
     $st->execute($bind);
     return ['player'=>$player, 'rows'=>$st->fetchAll()];
+}
+
+function top_domain_exclusions(): array {
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+
+    $cache = [];
+    $file = __DIR__ . '/top-domain-exclusions.txt';
+    if (!is_readable($file)) {
+        return $cache;
+    }
+
+    $lines = file($file, FILE_IGNORE_NEW_LINES);
+    if (!is_array($lines)) {
+        return $cache;
+    }
+
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#') {
+            continue;
+        }
+        $line = strtolower($line);
+        $cache[$line] = true;
+
+        $root = hostname_to_root($line);
+        if ($root !== '') {
+            $cache[$root] = true;
+        }
+    }
+
+    return $cache;
+}
+
+function hostname_to_root(string $hostname): string {
+    $hostname = strtolower(trim($hostname));
+    if ($hostname === '') {
+        return '';
+    }
+    if (strpos($hostname, '.') === false) {
+        return $hostname;
+    }
+    $parts = explode('.', $hostname);
+    if (count($parts) >= 2) {
+        return implode('.', array_slice($parts, -2));
+    }
+    return $hostname;
 }
