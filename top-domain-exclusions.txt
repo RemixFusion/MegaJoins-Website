@@ -1,0 +1,8 @@
+# List root domains or subdomains to hide from the Top Domains table.
+# One entry per line. Lines starting with # are ignored.
+# Example:
+# example.com
+# subdomain.example.net
+192.168.1.253
+192.168.0.8
+0.8
