@@ -60,3 +60,46 @@ function where_clauses($params) {
 function sql_root_expr($alias='root') {
     return "SUBSTRING_INDEX(hostname,'.',-2) AS `$alias`";
 }
+
+function root_from_hostname(string $hostname): string {
+    $hostname = strtolower(trim($hostname));
+    if ($hostname === '') {
+        return '';
+    }
+    $parts = explode('.', $hostname);
+    if (count($parts) >= 2) {
+        return implode('.', array_slice($parts, -2));
+    }
+    return $hostname;
+}
+
+function load_top_domain_exclusions(): array {
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+
+    $cache = [];
+    $file = __DIR__ . '/../top-domain-exclusions.txt';
+    if (!is_readable($file)) {
+        return $cache;
+    }
+
+    $lines = file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if ($lines === false) {
+        return $cache;
+    }
+
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#') {
+            continue;
+        }
+        $root = root_from_hostname($line);
+        if ($root !== '') {
+            $cache[$root] = true;
+        }
+    }
+
+    return $cache;
+}

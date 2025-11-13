@@ -70,18 +70,11 @@
       <thead><tr><th>Root Domain</th><th>Joins</th><th>Unique</th></tr></thead>
       <tbody></tbody>
     </table>
-    <div id="subdomain-drawer" class="drawer hidden">
-      <h3 id="drawer-title">Subdomains</h3>
-      <table id="subs-table">
-        <thead><tr><th>Subdomain</th><th>Joins</th><th>Unique</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
   </div>
   <div>
     <h2>Recent Joins</h2>
     <table id="recent-table">
-      <thead><tr><th>When</th><th>Hostname</th><th>Player</th><th>UUID</th></tr></thead>
+      <thead><tr><th>Player</th><th>Hostname</th><th>UUID</th><th>When</th></tr></thead>
       <tbody></tbody>
     </table>
     <div class="pager">
