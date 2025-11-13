@@ -79,19 +79,12 @@ function timeseries() {
     $pdo = db();
 
     $interval = $_GET['interval'] ?? pick_interval($p[3], $p[4]);
-    switch ($interval) {
-        case 'minute':
-            $bucket = "DATE_FORMAT(FROM_UNIXTIME(ts),'%Y-%m-%d %H:%i')";
-            break;
-        case 'hour':
-            $bucket = "DATE_FORMAT(FROM_UNIXTIME(ts),'%Y-%m-%d %H:00')";
-            break;
-        default:
-            $interval = 'day';
-            $bucket = "DATE(FROM_UNIXTIME(ts))";
+    if (!in_array($interval, ['minute', 'hour', 'day'], true)) {
+        $interval = 'day';
     }
 
-    $sql = "SELECT $bucket AS d, COUNT(*) c, COUNT(DISTINCT uuid) u
+    $bucket = bucket_expr($interval, 'ts');
+    $sql = "SELECT $bucket AS d, COUNT(*) c
             FROM joins
             $where
             GROUP BY d
@@ -100,7 +93,53 @@ function timeseries() {
     $st->execute($bind);
     $rows = $st->fetchAll();
 
-    return ['interval'=>$interval,'rows'=>$rows];
+    $index = [];
+    foreach ($rows as $i => $row) {
+        $rows[$i]['c'] = (int)$row['c'];
+        $rows[$i]['u'] = 0;
+        $index[$row['d']] = $i;
+    }
+
+    $uniqBucket = bucket_expr($interval, 'first_ts');
+    $uniqSql = "SELECT $uniqBucket AS d, COUNT(*) u
+                FROM (
+                    SELECT MIN(ts) AS first_ts
+                    FROM joins
+                    $where
+                    GROUP BY uuid
+                ) firsts
+                GROUP BY d
+                ORDER BY d ASC";
+    $uniqStmt = $pdo->prepare($uniqSql);
+    $uniqStmt->execute($bind);
+    while ($row = $uniqStmt->fetch()) {
+        $d = $row['d'];
+        $u = (int)$row['u'];
+        if (isset($index[$d])) {
+            $rows[$index[$d]]['u'] = $u;
+        } else {
+            $rows[] = ['d' => $d, 'c' => 0, 'u' => $u];
+        }
+    }
+
+    if (count($rows) > 1) {
+        usort($rows, function ($a, $b) {
+            return strcmp($a['d'], $b['d']);
+        });
+    }
+
+    return ['interval' => $interval, 'rows' => $rows];
+}
+
+function bucket_expr($interval, $column = 'ts') {
+    switch ($interval) {
+        case 'minute':
+            return "DATE_FORMAT(FROM_UNIXTIME($column),'%Y-%m-%d %H:%i')";
+        case 'hour':
+            return "DATE_FORMAT(FROM_UNIXTIME($column),'%Y-%m-%d %H:00')";
+        default:
+            return "DATE(FROM_UNIXTIME($column))";
+    }
 }
 
 function top_hosts_root() {
