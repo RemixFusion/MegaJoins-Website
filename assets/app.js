@@ -4,6 +4,13 @@
   const fmtNum = (n)=>Number(n).toLocaleString();
   const toDashedUuid = (hex)=> hex.length===32 ? [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-') : hex;
 
+  function addPlayerFilter(name){
+    const field = qs('#player');
+    const names = field.value.split(',').map(s=>s.trim()).filter(Boolean);
+    if (!names.includes(name)) names.push(name);
+    field.value = names.join(', ');
+  }
+
   // Defaults: last 7 days
   const now = new Date();
   const start = new Date(now.getTime()-6*24*3600*1000);
@@ -83,7 +90,7 @@
       a.addEventListener('mouseover', (e)=>showPlayerTooltip(e, a.dataset.player));
       a.addEventListener('mousemove', positionTooltip);
       a.addEventListener('mouseout', hideTooltip);
-      a.addEventListener('click', e=>{ e.preventDefault(); qs('#player').value=a.dataset.player; page=1; loadAll(); });
+      a.addEventListener('click', e=>{ e.preventDefault(); addPlayerFilter(a.dataset.player); page=1; loadAll(); });
     });
     rb.querySelectorAll('a.uuid').forEach(a => a.addEventListener('click', e=>{
       e.preventDefault();
@@ -117,8 +124,8 @@
     clearTimeout(tooltipTimer);
     const tip = qs('#tooltip');
     tip.innerHTML = 'Loading…';
-    positionTooltip(evt);
     tip.classList.remove('hidden');
+    positionTooltip(evt);
     try {
       const data = await (await fetch('api.php?action=player-stats&player='+encodeURIComponent(player)+'&'+params())).json();
       if (!data.rows) { tip.innerHTML='No data'; return; }
@@ -145,8 +152,15 @@
   function positionTooltip(e){
     const tip = qs('#tooltip');
     const pad = 10;
-    tip.style.left = (e.clientX + pad) + 'px';
-    tip.style.top = (e.clientY + pad) + 'px';
+    const rect = tip.getBoundingClientRect();
+    let left = e.clientX + pad;
+    let top = e.clientY + pad;
+    const maxLeft = window.innerWidth - rect.width - pad;
+    const maxTop = window.innerHeight - rect.height - pad;
+    if (left > maxLeft) left = Math.max(pad, maxLeft);
+    if (top > maxTop) top = Math.max(pad, e.clientY - rect.height - pad);
+    tip.style.left = left + 'px';
+    tip.style.top = top + 'px';
   }
   function hideTooltip(){ tooltipTimer=setTimeout(()=>qs('#tooltip').classList.add('hidden'), 150); }
 

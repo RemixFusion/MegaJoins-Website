@@ -38,8 +38,8 @@
       <input type="text" id="uuid" name="uuid" placeholder="32-char hex">
     </div>
     <div class="row">
-      <label>Player</label>
-      <input list="player-list" id="player" name="player" placeholder="(any)">
+      <label>Player(s)</label>
+      <input list="player-list" id="player" name="player" placeholder="Comma-separated">
       <datalist id="player-list"></datalist>
     </div>
     <div class="row">

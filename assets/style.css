@@ -26,7 +26,7 @@ footer { padding: 8px 24px 24px; color:var(--muted); }
 canvas { background:var(--panel); padding:16px; border-radius:14px; }
 .drawer { margin-top:8px; background:#0f1520; border:1px solid #223043; border-radius:12px; padding:8px; }
 .hidden { display:none; }
-.tooltip { position:fixed; background:#0f1520; border:1px solid #223043; border-radius:8px; padding:8px 10px; font-size:13px; max-width:380px; box-shadow:0 6px 24px rgba(0,0,0,.35); z-index:10; }
+.tooltip { position:fixed; background:#0f1520; border:1px solid #223043; border-radius:8px; padding:8px 10px; font-size:13px; max-width:380px; box-shadow:0 6px 24px rgba(0,0,0,.35); z-index:10; pointer-events:none; }
 .tooltip table { width:100%; }
 @media (max-width: 1100px) {
   .grid.two { grid-template-columns: 1fr; }
