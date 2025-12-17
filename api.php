@@ -191,6 +191,9 @@ function top_hosts_root() {
     list($where, $bind) = where_clauses($p);
     $pdo = db();
 
+    // Exclude private LAN address ranges from the root leaderboard
+    $where .= " AND hostname NOT REGEXP '^(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.)'";
+
     $rootExpr = sql_root_expr('root');
     $sql = "SELECT $rootExpr, COUNT(*) c, COUNT(DISTINCT player_name) u
             FROM joins

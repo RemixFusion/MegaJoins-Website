@@ -62,8 +62,13 @@
     const tb = qs('#roots-table tbody'); tb.innerHTML='';
     h.rows.forEach(r=>{
       const tr = document.createElement('tr');
+      const total = Number(r.c);
+      const uniq = Number(r.u);
       const a = document.createElement('a'); a.href='#'; a.textContent=r.root;
       a.addEventListener('click', e=>{ e.preventDefault(); showSubdomains(r.root); });
+      a.addEventListener('mouseover', e=>showRootTooltip(e, r.root, total, uniq));
+      a.addEventListener('mousemove', positionTooltip);
+      a.addEventListener('mouseout', hideTooltip);
       tr.innerHTML = `<td></td><td>${fmtNum(r.c)}</td><td>${fmtNum(r.u)}</td>`;
       tr.children[0].appendChild(a);
       tb.appendChild(tr);
@@ -116,6 +121,28 @@
       tb.appendChild(tr);
     });
     qs('#subdomain-drawer').classList.remove('hidden');
+  }
+
+  async function showRootTooltip(evt, root, total, uniq){
+    clearTimeout(tooltipTimer);
+    const tip = qs('#tooltip');
+    tip.innerHTML = 'Loading…';
+    tip.classList.remove('hidden');
+    positionTooltip(evt);
+    try {
+      const data = await (await fetch('api.php?action=subdomains&root='+encodeURIComponent(root)+'&'+params())).json();
+      const rows = data.rows || [];
+      let html = `<strong>${root}</strong><div style="color:var(--muted); font-size:12px;">Joins: ${fmtNum(total)} · Unique: ${fmtNum(uniq)}</div>`;
+      if (!rows.length) { tip.innerHTML = html + '<div>No subdomains found</div>'; return; }
+      html += '<table><thead><tr><th>Subdomain</th><th>Joins</th><th>Unique</th></tr></thead><tbody>';
+      rows.slice(0, 10).forEach(r=>{
+        html += `<tr><td>${r.hostname}</td><td>${fmtNum(r.c)}</td><td>${fmtNum(r.u)}</td></tr>`;
+      });
+      html += '</tbody></table>';
+      tip.innerHTML = html;
+    } catch(e){
+      tip.innerHTML = 'Error loading';
+    }
   }
 
   // Player tooltip
