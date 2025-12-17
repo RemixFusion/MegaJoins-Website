@@ -46,7 +46,7 @@ function summary() {
     $total->execute($bind);
     $allJoins = (int)$total->fetchColumn();
 
-    $uniq = $pdo->prepare("SELECT COUNT(DISTINCT uuid) c FROM joins $where");
+    $uniq = $pdo->prepare("SELECT COUNT(DISTINCT player_name) c FROM joins $where");
     $uniq->execute($bind);
     $uniqueJoins = (int)$uniq->fetchColumn();
 
@@ -56,7 +56,7 @@ function summary() {
 
     return [
         'filters' => [
-            'host'=>$p[0],'uuid'=>$p[1],'player'=>$p[2],'start'=>$p[3],'end'=>$p[4]
+            'host'=>$p[0],'uuid'=>$p[1],'players'=>$p[2],'start'=>$p[3],'end'=>$p[4]
         ],
         'totals' => [
             'all' => $allJoins,
@@ -106,7 +106,7 @@ function timeseries() {
                     SELECT MIN(ts) AS first_ts
                     FROM joins
                     $where
-                    GROUP BY uuid
+                    GROUP BY player_name
                 ) firsts
                 GROUP BY d
                 ORDER BY d ASC";
@@ -122,11 +122,7 @@ function timeseries() {
         }
     }
 
-    if (count($rows) > 1) {
-        usort($rows, function ($a, $b) {
-            return strcmp($a['d'], $b['d']);
-        });
-    }
+    $rows = fill_buckets($rows, $p[3], $p[4], $interval);
 
     return ['interval' => $interval, 'rows' => $rows];
 }
@@ -142,13 +138,61 @@ function bucket_expr($interval, $column = 'ts') {
     }
 }
 
+function bucket_label($interval, $ts) {
+    switch ($interval) {
+        case 'minute':
+            return date('Y-m-d H:i', $ts - ($ts % 60));
+        case 'hour':
+            return date('Y-m-d H:00', $ts - ($ts % 3600));
+        default:
+            return date('Y-m-d', strtotime(date('Y-m-d', $ts)));
+    }
+}
+
+function bucket_step($interval) {
+    switch ($interval) {
+        case 'minute': return 60;
+        case 'hour': return 3600;
+        default: return 86400;
+    }
+}
+
+function fill_buckets(array $rows, int $start, int $end, string $interval) {
+    $existing = [];
+    foreach ($rows as $row) {
+        $existing[$row['d']] = ['c' => (int)$row['c'], 'u' => (int)$row['u']];
+    }
+
+    $step = bucket_step($interval);
+    $cursor = $start - ($start % $step);
+    if ($interval === 'day') {
+        $cursor = strtotime(date('Y-m-d', $start));
+    }
+    $endCursor = $end - ($end % $step);
+    if ($interval === 'day') {
+        $endCursor = strtotime(date('Y-m-d', $end));
+    }
+
+    $filled = [];
+    for ($ts = $cursor; $ts <= $endCursor; $ts += $step) {
+        $label = bucket_label($interval, $ts);
+        $filled[] = [
+            'd' => $label,
+            'c' => $existing[$label]['c'] ?? 0,
+            'u' => $existing[$label]['u'] ?? 0,
+        ];
+    }
+
+    return $filled;
+}
+
 function top_hosts_root() {
     $p = filter_params();
     list($where, $bind) = where_clauses($p);
     $pdo = db();
 
     $rootExpr = sql_root_expr('root');
-    $sql = "SELECT $rootExpr, COUNT(*) c, COUNT(DISTINCT uuid) u
+    $sql = "SELECT $rootExpr, COUNT(*) c, COUNT(DISTINCT player_name) u
             FROM joins
             $where
             GROUP BY root
@@ -169,7 +213,7 @@ function subdomains() {
     $where .= " AND hostname LIKE :like";
     $bind[':like'] = '%.' . $root;
 
-    $sql = "SELECT hostname, COUNT(*) c, COUNT(DISTINCT uuid) u
+    $sql = "SELECT hostname, COUNT(*) c, COUNT(DISTINCT player_name) u
             FROM joins
             $where
             GROUP BY hostname
@@ -220,12 +264,12 @@ function player_stats() {
     if ($player === '') return ['rows'=>[]];
     $p = filter_params();
     // force player filter
-    $p[2] = $player;
+    $p[2] = [$player];
     list($where, $bind) = where_clauses($p);
     $pdo = db();
 
     $rootExpr = sql_root_expr('root');
-    $sql = "SELECT $rootExpr, hostname, COUNT(*) c, COUNT(DISTINCT uuid) u
+    $sql = "SELECT $rootExpr, hostname, COUNT(*) c, COUNT(DISTINCT player_name) u
             FROM joins
             $where
             GROUP BY root, hostname
